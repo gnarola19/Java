@@ -1,0 +1,303 @@
+===== JAVA FILES =====
+src\CollectionsDemo.java
+src\CustomerRepositoryDemo.java
+src\RepositoryDemo.java
+src\exception\AccountNotFoundException.java
+src\exception\BankException.java
+src\exception\InsufficientFundsException.java
+src\exception\InvalidAmountException.java
+src\model\Account.java
+src\model\Command.java
+src\model\CurrentAccount.java
+src\model\FixedDepositAccount.java
+src\model\InterestBearing.java
+src\model\Premium.java
+src\model\SavingsAccount.java
+src\model\Transactable.java
+src\model\TransactionType.java
+src\model\annotation\Id.java
+src\model\annotation\MaxLength.java
+src\model\annotation\Positive.java
+src\service\AccountStore.java
+src\service\AccountWorker.java
+src\service\AnnotationDemo.java
+src\service\CommandParser.java
+src\service\MiniBank.java
+src\service\ReportGenerator.java
+src\service\Repository.java
+src\service\StatePersister.java
+src\service\TransactionLog.java
+src\service\TransactionProcessor.java
+src\service\TransactionQueue.java
+src\service\TransferDeadlockDemo.java
+src\util\AnnotationValidator.java
+src\util\StatementFormatter.java
+src\util\Validator.java
+src\util\WithdrawRule.java
+
+===== REPOSITORY =====
+package service;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+public class Repository<T> {
+
+    private final HashMap<String, T> storage = new HashMap<>();
+
+    public T save(T entity) {
+        if (entity == null) {
+            throw new IllegalArgumentException("Entity cannot be null");
+        }
+
+        String id = extractId(entity);
+        storage.put(id, entity);
+        return entity;
+    }
+
+    private String extractId(T entity) {
+        Class<?> type = entity.getClass();
+
+        while (type != null && type != Object.class) {
+            for (Field field : type.getDeclaredFields()) {
+
+                boolean isId = false;
+
+                for (java.lang.annotation.Annotation annotation
+                        : field.getAnnotations()) {
+                    if (annotation.annotationType().getSimpleName()
+                            .equals("Id")) {
+                        isId = true;
+                        break;
+                    }
+                }
+
+                if (isId) {
+                    try {
+                        field.setAccessible(true);
+                        Object value = field.get(entity);
+
+                        if (value == null) {
+                            throw new IllegalArgumentException(
+                                    "@Id field cannot be null"
+                            );
+                        }
+
+                        return value.toString();
+
+                    } catch (IllegalAccessException e) {
+                        throw new IllegalStateException(
+                                "Cannot read @Id field", e
+                        );
+                    }
+                }
+            }
+
+            type = type.getSuperclass();
+        }
+
+        throw new IllegalArgumentException(
+                "No field marked with @Id found in "
+                + entity.getClass().getName()
+        );
+    }
+
+    public T findById(String id) {
+        return storage.get(id);
+    }
+
+    public ArrayList<T> findAll() {
+        return new ArrayList<>(storage.values());
+    }
+
+    public boolean delete(String id) {
+        return storage.remove(id) != null;
+    }
+
+    @SafeVarargs
+    public final void saveAll(T... items) {
+        for (T item : items) {
+            save(item);
+        }
+    }
+
+    public int count() {
+        return storage.size();
+    }
+
+    public static <N extends Number> double average(N[] values) {
+        if (values == null || values.length == 0) {
+            throw new IllegalArgumentException(
+                    "Array cannot be null or empty"
+            );
+        }
+
+        double sum = 0;
+
+        for (N value : values) {
+            if (value == null) {
+                throw new IllegalArgumentException(
+                        "Array cannot contain null values"
+                );
+            }
+
+            sum += value.doubleValue();
+        }
+
+        return sum / values.length;
+    }
+}
+
+===== VALIDATOR AND EXCEPTIONS =====
+
+--- AccountNotFoundException.java ---
+package exception;
+
+public class AccountNotFoundException extends BankException {
+    public AccountNotFoundException(String accountNumber) {
+        super("Account not found: " + accountNumber);
+    }
+}
+
+--- BankException.java ---
+package exception;
+
+public class BankException extends Exception {
+    public BankException(String message) {
+        super(message);
+    }
+}
+
+--- InsufficientFundsException.java ---
+package exception;
+
+public class InsufficientFundsException extends BankException {
+    private final long shortfall;
+
+    public InsufficientFundsException(long shortfall) {
+        super("Insufficient funds. Shortfall: Rs. " + shortfall);
+        this.shortfall = shortfall;
+    }
+
+    public long getShortfall() {
+        return shortfall;
+    }
+}
+
+--- InvalidAmountException.java ---
+package exception;
+
+public class InvalidAmountException extends BankException {
+    public InvalidAmountException(long amount) {
+        super("Invalid amount: " + amount + ". Amount must be greater than zero.");
+    }
+}
+
+--- AnnotationValidator.java ---
+package util;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+import model.annotation.Positive;
+import model.annotation.MaxLength;
+
+public class AnnotationValidator {
+    public static String[] validate(Object obj) {
+        List<String> errors = new ArrayList<>();
+
+        if (obj == null) {
+            return new String[]{"Object cannot be null"};
+        }
+
+        Class<?> current = obj.getClass();
+
+        while (current != null && current != Object.class) {
+            for (Field field : current.getDeclaredFields()) {
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(obj);
+
+                    if (field.isAnnotationPresent(Positive.class)) {
+                        Positive annotation = field.getAnnotation(Positive.class);
+
+                        if (value instanceof Number
+                                && ((Number) value).doubleValue() <= 0) {
+                            errors.add(annotation.message());
+                        }
+                    }
+
+                    if (field.isAnnotationPresent(MaxLength.class)) {
+                        MaxLength annotation = field.getAnnotation(MaxLength.class);
+
+                        if (value instanceof String
+                                && ((String) value).length() > annotation.value()) {
+                            errors.add(field.getName()
+                                    + " exceeds maximum length "
+                                    + annotation.value());
+                        }
+                    }
+                } catch (IllegalAccessException e) {
+                    errors.add("Unable to validate field: " + field.getName());
+                }
+            }
+
+            current = current.getSuperclass();
+        }
+
+        return errors.toArray(new String[0]);
+    }
+}
+
+--- Validator.java ---
+package util;
+
+import java.util.regex.Pattern;
+
+public class Validator {
+
+    private static final Pattern MOBILE =
+            Pattern.compile("^[6-9][0-9]{9}$");
+
+    private static final Pattern EMAIL =
+            Pattern.compile(
+                    "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+            );
+
+    private static final Pattern PAN =
+            Pattern.compile("^[A-Z]{5}[0-9]{4}[A-Z]$");
+
+    private static final Pattern IFSC =
+            Pattern.compile("^[A-Z]{4}0[A-Z0-9]{6}$");
+
+    public static boolean isValidMobile(String mobile) {
+        return mobile != null && MOBILE.matcher(mobile).matches();
+    }
+
+    public static boolean isValidEmail(String email) {
+        return email != null && EMAIL.matcher(email).matches();
+    }
+
+    public static boolean isValidPan(String pan) {
+        return pan != null && PAN.matcher(pan).matches();
+    }
+
+    public static boolean isValidIfsc(String ifsc) {
+        return ifsc != null && IFSC.matcher(ifsc).matches();
+    }
+
+    public static boolean isValidAmount(String amount) {
+        return amount != null && amount.matches("[1-9][0-9]*");
+    }
+}
+
+===== MAIN CLASSES =====
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\CollectionsDemo.java:13:    public static void main(String[] args) throws InterruptedException {
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\CustomerRepositoryDemo.java:36:    public static void main(String[] args) {
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\RepositoryDemo.java:11:    public static void main(String[] args) {
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\service\AnnotationDemo.java:23:    public static void main(String[] args) {
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\service\MiniBank.java:12:public class MiniBank {
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\service\MiniBank.java:14:    public static void main(String[] args) {
+E:\Java Programming\Java\Practicals\Lab-12\Project\src\service\TransferDeadlockDemo.java:96:    public static void main(String[] args) throws InterruptedException {

@@ -1,0 +1,5 @@
+FOLDER TREE REPORT
+==================
+Name: documents\assignment.txt | Size: 29 bytes | Modified: 2026-10-29T09:01:02.917Z
+Name: images\info.txt | Size: 13 bytes | Modified: 2026-10-29T09:01:02.918Z
+Name: notes.txt | Size: 35 bytes | Modified: 2026-10-29T09:01:02.916Z
